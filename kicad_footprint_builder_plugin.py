@@ -10721,7 +10721,13 @@ class ModelSettingsDialog(wx.Dialog):
         api_key: str,
         allow_insecure_http: bool,
     ):
-        super().__init__(parent, title="模型连接设置", size=(680, 330))
+        super().__init__(
+            parent,
+            title="模型连接设置",
+            size=(760, 460),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        self.SetMinSize((680, 420))
         self.base_url = wx.TextCtrl(self, value=base_url)
         self.model = wx.ComboBox(
             self,
@@ -10738,6 +10744,9 @@ class ModelSettingsDialog(wx.Dialog):
         )
         self.model.SetToolTip("可从列表选择，也可直接输入网关支持的其他模型 ID")
         self.api_key = wx.TextCtrl(self, value=api_key, style=wx.TE_PASSWORD)
+        self.api_key.SetHint("请输入 API Key（仅当前窗口有效）")
+        self.api_key.SetMinSize((-1, 32))
+        self.api_key.Show(True)
         self.allow_insecure_http = wx.CheckBox(
             self,
             label="我确认允许远程 HTTP 明文传输密钥与封装图（仅当前窗口）",
@@ -10749,7 +10758,7 @@ class ModelSettingsDialog(wx.Dialog):
         for label, control in (
             ("Base URL", self.base_url),
             ("模型", self.model),
-            ("API Key", self.api_key),
+            ("API Key（密码掩码）", self.api_key),
         ):
             form.Add(wx.StaticText(self, label=label), 0, wx.ALIGN_CENTER_VERTICAL)
             form.Add(control, 1, wx.EXPAND)
@@ -10757,20 +10766,24 @@ class ModelSettingsDialog(wx.Dialog):
             self,
             label="连接信息只保留在当前窗口内；远程 HTTP 放行默认关闭。",
         )
+        note.Wrap(700)
         insecure_note = wx.StaticText(
             self,
             label="警告：启用后网络中间节点可能读取密钥、图片和模型响应。",
         )
         insecure_note.SetForegroundColour(wx.Colour("#9A3412"))
+        insecure_note.Wrap(700)
         buttons = self.CreateSeparatedButtonSizer(wx.OK | wx.CANCEL)
         root = wx.BoxSizer(wx.VERTICAL)
-        root.Add(form, 1, wx.EXPAND | wx.ALL, 14)
+        root.Add(form, 0, wx.EXPAND | wx.ALL, 14)
         root.Add(self.allow_insecure_http, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 14)
         root.Add(insecure_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         root.Add(note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 14)
         if buttons:
             root.Add(buttons, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.SetSizer(root)
+        self.Layout()
+        self.CentreOnParent()
 
     def values(self) -> tuple[str, str, str, bool]:
         return (
@@ -11158,6 +11171,14 @@ class E1aDialog(wx.Dialog):
         self.tab_pad_number.SetSelection(1)
         self.tab_pad_number.Hide()
         self.model_label = wx.StaticText(self, label=self.model_name)
+        self.api_key_input = wx.TextCtrl(
+            self,
+            value=self.model_api_key,
+            style=wx.TE_PASSWORD,
+            size=(220, -1),
+        )
+        self.api_key_input.SetHint("输入 API Key")
+        self.api_key_input.SetToolTip("密钥仅保留在当前插件窗口，不写入文件")
         self.model_settings_button = wx.Button(self, label="连接设置")
         self.transcribe_button = wx.Button(self, label="读取尺寸并预填")
         self.transcribe_button.SetToolTip("模型转录 → 确定性裁族 → 自动预填 → 生成预览；仍须人工确认入库")
@@ -11407,6 +11428,8 @@ class E1aDialog(wx.Dialog):
         action_row = wx.BoxSizer(wx.HORIZONTAL)
         action_row.Add(wx.StaticText(self, label="模型"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
         action_row.Add(self.model_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        action_row.Add(wx.StaticText(self, label="API Key"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        action_row.Add(self.api_key_input, 0, wx.RIGHT, 8)
         action_row.Add(self.model_settings_button, 0, wx.RIGHT, 8)
         action_row.Add(self.transcribe_button, 0, wx.RIGHT, 14)
         action_row.Add(self.status, 1, wx.ALIGN_CENTER_VERTICAL)
@@ -11584,6 +11607,7 @@ class E1aDialog(wx.Dialog):
             self.suggest_pdf_button,
             self.load_page_button,
             self.family,
+            self.api_key_input,
             self.model_settings_button,
             self.transcribe_button,
             self.generate_button,
@@ -11860,7 +11884,7 @@ class E1aDialog(wx.Dialog):
             self,
             self.model_base_url,
             self.model_name,
-            self.model_api_key,
+            self.api_key_input.GetValue().strip(),
             self.model_allow_insecure_http,
         )
         try:
@@ -11888,6 +11912,7 @@ class E1aDialog(wx.Dialog):
         self.model_base_url = base_url
         self.model_name = model_name
         self.model_api_key = api_key
+        self.api_key_input.SetValue(api_key)
         self.model_allow_insecure_http = allow_insecure_http
         self.model_label.SetLabel(model_name)
         self.Layout()
@@ -11932,6 +11957,7 @@ class E1aDialog(wx.Dialog):
         if self.fixture_path is None and not self.model_base_url:
             if not self.on_model_settings(None):
                 return
+        self.model_api_key = self.api_key_input.GetValue().strip()
         mode = "fixture_replay_no_model" if self.fixture_path else "live_model"
         try:
             run_dir = self.store.start(
